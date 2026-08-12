@@ -9,7 +9,9 @@ It only works with *FL Studio 2026*. Send me a private message if you want to us
 
 Instrucions
 -
-- Download the latest version of **FL-Launcher-x64.exe** or **FL-Launcher-x32.exe** from [*here*](https://github.com/kiriuu/FL-Launcher/releases). To find out which version you need, just go to Windows Settings and check whether your PC is x64 or x32.
+- Download the latest version of **FL-Launcher-x64.zip** or **FL-Launcher-x32.zip** from [*here*](https://github.com/kiriuu/FL-Launcher/releases). To find out which version you need, just go to Windows Settings and check whether your PC is x64 or x32.
+- Extract the **ZIP** file
+- Open the folder
 - Open the file **.exe**
 - Enjoy :)
 
