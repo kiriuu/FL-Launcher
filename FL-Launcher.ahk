@@ -1,25 +1,39 @@
 ﻿#Requires AutoHotkey v2.0
 #SingleInstance Force
 
-; ==============================================================================
-; STARTUP LOADING SCREEN
-; ==============================================================================
-LoadingGui := Gui("+ToolWindow -Caption +AlwaysOnTop", "Loading")
-LoadingGui.BackColor := "0A0512"
-LoadingGui.SetFont("s16 q5 Bold c80D8FF", "Segoe UI Variable Display")
-LoadingGui.AddText("x30 y25 w240 h35 Center", "FL LAUNCHER")
-LoadingGui.SetFont("s10 q5 c8A82A0", "Segoe UI Variable Text")
-LoadingGui.AddText("x30 y60 w240 h25 Center", "Initializing environment...")
-LoadingProg := LoadingGui.AddProgress("x30 y95 w240 h6 Background23153D c80D8FF Range0-100", 30)
-LoadingGui.Show("w300 h130")
+; Salvataggio automatico delle statistiche alla chiusura dello script
+OnExit(SaveStatsOnExit)
 
-Sleep(300)
-LoadingProg.Value := 70
-Sleep(300)
+; ==============================================================================
+; AUTOSTART IN BACKGROUND CONFIGURATION
+; ==============================================================================
+global IsBackgroundMode := false
 
+for arg in A_Args {
+    if (StrLower(arg) == "/background" || StrLower(arg) == "-background") {
+        global IsBackgroundMode := true
+        break
+    }
+}
+
+StartupLnk := A_Startup "\FL-Launcher.lnk"
+if !FileExist(StartupLnk) {
+    try {
+        if A_IsCompiled {
+            FileCreateShortcut(A_ScriptFullPath, StartupLnk, A_ScriptDir, "/background", "FL Launcher Background Startup")
+        } else {
+            FileCreateShortcut(A_AhkPath, StartupLnk, A_ScriptDir, '"' A_ScriptFullPath '" /background', "FL Launcher Background Startup")
+        }
+    }
+}
+
+; ==============================================================================
+; CONFIGURATION & GLOBALS
+; ==============================================================================
 global IniPath := A_ScriptDir "\launcher_config.ini"
+global LogoPath := A_ScriptDir "\fl-studio.png"
 global DefaultProjectsDir := A_MyDocuments "\Image-Line\FL Studio\Projects"
-global ProjectsFolder := IniRead(IniPath, "Settings", "ProjectsFolder", DefaultProjectsDir)
+global ProjectsFolder := RTrim(IniRead(IniPath, "Settings", "ProjectsFolder", DefaultProjectsDir), "\")
 global FLStudioPath := IniRead(IniPath, "Settings", "FLStudioPath", "C:\Program Files\Image-Line\FL Studio 2026\FL64.exe")
 
 global CurrentDate := A_YYYY "_" A_MM "_" A_DD
@@ -30,95 +44,185 @@ global LastDetectedProject := ""
 global CurrentProjectList := []
 global CurrentSelectedFolderPath := ProjectsFolder
 
-LoadingProg.Value := 100
-Sleep(200)
-LoadingGui.Destroy()
-
-; --- COLOR PALETTE (WAERA DEEP OBSIDIAN PURPLE) ---
-MainGui := Gui("+Resize", "FL Launcher")
-MainGui.BackColor := "0A0512"
+global hLogoLoading := 0
+global hLogoMain := 0
 
 ; ==============================================================================
-; TOP HEADER & BANNER (BRANDING & STATS)
+; SYSTEM TRAY SETUP
 ; ==============================================================================
-
-MainGui.SetFont("s16 q5 Bold c80D8FF", "Segoe UI Variable Display")
-MainGui.AddText("x25 y18 w220 h35", "FL LAUNCHER")
-
-MainGui.SetFont("s11 q5 Bold cWhite", "Segoe UI Variable Text")
-StatusDot := MainGui.AddText("x220 y20 w25 h30 Center", "🔴")
-StatusText := MainGui.AddText("x248 y20 w130 h30", "Offline")
-
-MainGui.SetFont("s9 q5 Bold c8A82A0", "Segoe UI Variable Text")
-MainGui.AddText("x520 y12 w130 h18 Center", "DAILY TIME")
-MainGui.SetFont("s12 q5 Bold cFF9800", "Segoe UI Variable Display")
-DailyTimeLabel := MainGui.AddText("x520 y30 w130 h25 Center", "00:00:00")
-
-MainGui.SetFont("s9 q5 Bold c8A82A0", "Segoe UI Variable Text")
-MainGui.AddText("x660 y12 w130 h18 Center", "PROJECT TIME")
-MainGui.SetFont("s12 q5 Bold c80D8FF", "Segoe UI Variable Display")
-ProjectTimeLabel := MainGui.AddText("x660 y30 w130 h25 Center", "00:00:00")
-
-MainGui.SetFont("s9 q5 Bold c8A82A0", "Segoe UI Variable Text")
-MainGui.AddText("x800 y12 w130 h18 Center", "TOTAL TIME")
-MainGui.SetFont("s12 q5 Bold cD1B3FF", "Segoe UI Variable Display")
-TotalTimeLabel := MainGui.AddText("x800 y30 w130 h25 Center", "00:00:00")
+A_IconTip := "FL Launcher — DAW Workspace"
+Tray := A_TrayMenu
+Tray.Delete()
+Tray.Add("🎛️ Open Launcher", (*) => MainGui.Show())
+Tray.Add("🚀 Launch FL Studio", (*) => RunFLStudio())
+Tray.Add()
+Tray.Add("❌ Exit Launcher", (*) => ExitApp())
+Tray.Default := "🎛️ Open Launcher"
 
 ; ==============================================================================
-; ACTION TOOLBAR
+; STARTUP LOADING SCREEN
 ; ==============================================================================
-MainGui.SetFont("s10 q5 Bold cBlack", "Segoe UI Variable Text")
+if !IsBackgroundMode {
+    LoadingGui := Gui("+ToolWindow -Caption +AlwaysOnTop", "Loading")
+    LoadingGui.BackColor := "0D0E12"
 
-BtnLaunch  := MainGui.AddButton("x950 y15 w100 h40", "🚀 Launch")
-BtnLaunch.OnEvent("Click", (*) => RunFLStudio())
+    if FileExist(LogoPath) {
+        hLogoLoading := CreateScaledBitmap(LogoPath, 30, 30)
+        if hLogoLoading
+            LoadingGui.AddPicture("x45 y20 w30 h30", "HBITMAP:" hLogoLoading)
+        
+        LoadingGui.SetFont("s16 q5 Bold c00F0FF", "Segoe UI Variable Display")
+        LoadingGui.AddText("x83 y20 w180 h35", "FL LAUNCHER")
+    } else {
+        LoadingGui.SetFont("s16 q5 Bold c00F0FF", "Segoe UI Variable Display")
+        LoadingGui.AddText("x30 y20 w240 h35 Center", "FL LAUNCHER")
+    }
 
-BtnRefresh := MainGui.AddButton("x1060 y15 w85 h40", "🔄 Sync")
-BtnRefresh.OnEvent("Click", (*) => RefreshAll())
+    LoadingGui.SetFont("s10 q5 c8B95A5", "Segoe UI Variable Text")
+    LoadingGui.AddText("x30 y60 w240 h25 Center", "Loading DAW environment...")
+    LoadingProg := LoadingGui.AddProgress("x30 y95 w240 h4 Background151720 c00F0FF Range0-100", 30)
+    LoadingGui.Show("w300 h130")
 
-MainGui.AddProgress("x25 y68 w1120 h2 Background23153D c23153D", 100)
+    Sleep(200)
+    LoadingProg.Value := 75
+    Sleep(200)
+}
 
-; ==============================================================================
-; SEARCH BAR & FILE ACTIONS
-; ==============================================================================
-MainGui.SetFont("s10 q5 Bold c80D8FF", "Segoe UI Variable Display")
-MainGui.AddText("x25 y86 w260 h25", "FOLDERS")
-
-MainGui.SetFont("s10 q5 Bold cE0E0E0", "Segoe UI Variable Text")
-SearchEdit := MainGui.AddEdit("x310 y80 w460 h36 Background180F2B cE0E0E0 -Border", "")
-SearchEdit.OnEvent("Change", (*) => DisplayProjects())
-DllCall("SendMessage", "Ptr", SearchEdit.Hwnd, "UInt", 0x1501, "Ptr", 1, "Str", "🔍 Search project by name...")
-
-MainGui.SetFont("s10 q5 Bold cBlack", "Segoe UI Variable Text")
-BtnAdd    := MainGui.AddButton("x785 y80 w85 h36", "➕ Import")
-BtnAdd.OnEvent("Click", (*) => AddExternalProject())
-
-BtnMove   := MainGui.AddButton("x878 y80 w80 h36", "📦 Move")
-BtnMove.OnEvent("Click", (*) => MoveSelectedItem())
-
-BtnDelete := MainGui.AddButton("x966 y80 w85 h36", "🗑️ Delete")
-BtnDelete.OnEvent("Click", (*) => DeleteSelectedItem())
-
-BtnFolder := MainGui.AddButton("x1059 y80 w90 h36", "📂 Projects")
-BtnFolder.OnEvent("Click", SelectProjectsFolder)
+if !IsBackgroundMode && IsSet(LoadingGui) {
+    LoadingProg.Value := 100
+    Sleep(150)
+    LoadingGui.Destroy()
+}
 
 ; ==============================================================================
-; MAIN PANELS
+; MAIN GUI
 ; ==============================================================================
-FolderTree := MainGui.AddTreeView("x25 y125 w260 h490 Background110A1F cE0E0E0 -Border")
+MainGui := Gui("-Resize", "FL Launcher — Workspace")
+MainGui.BackColor := "0D0E12"
+
+MainGui.OnEvent("Close", (*) => MainGui.Hide())
+
+; ------------------------------------------------------------------------------
+; LEFT SIDEBAR
+; ------------------------------------------------------------------------------
+if FileExist(LogoPath) {
+    hLogoMain := CreateScaledBitmap(LogoPath, 28, 28)
+    if hLogoMain
+        MainGui.AddPicture("x20 y16 w28 h28", "HBITMAP:" hLogoMain)
+    
+    MainGui.SetFont("s15 q5 Bold c00F0FF", "Segoe UI Variable Display")
+    MainGui.AddText("x54 y16 w200 h30", "FL LAUNCHER")
+} else {
+    MainGui.SetFont("s15 q5 Bold c00F0FF", "Segoe UI Variable Display")
+    MainGui.AddText("x20 y16 w240 h30", "FL LAUNCHER")
+}
+
+MainGui.SetFont("s8 q5 Bold c5A6578", "Segoe UI Variable Text")
+MainGui.AddText("x20 y52 w240 h18", "WORKSPACE LIBRARY")
+
+FolderTree := MainGui.AddTreeView("x20 y72 w240 h450 Background111217 cE2E8F0 -Border")
 FolderTree.OnEvent("ItemSelect", OnFolderSelect)
 FolderTree.OnEvent("ContextMenu", ShowFolderContextMenu)
 
-ProjectLV := MainGui.AddListView("x310 y125 w835 h490 -Multi Background110A1F cE0E0E0 -Border", ["Project Name", "Last Modified", "Path"])
+MainGui.AddProgress("x20 y530 w240 h1 Background232635 c232635", 100)
+
+MainGui.SetFont("s10 q5 Bold cWhite", "Segoe UI Variable Text")
+StatusDot := MainGui.AddText("x20 y539 w22 h22 Center", "⚪")
+StatusText := MainGui.AddText("x45 y540 w100 h22", "Offline")
+
+BtnLaunch := MainGui.AddButton("x20 y570 w240 h45", "🚀 LAUNCH FL STUDIO")
+BtnLaunch.OnEvent("Click", (*) => RunFLStudio())
+
+; ------------------------------------------------------------------------------
+; RIGHT MAIN WORKSPACE AREA
+; ------------------------------------------------------------------------------
+MainGui.SetFont("s8 q5 Bold c5A6578", "Segoe UI Variable Text")
+MainGui.AddText("x280 y15 w180 h16", "TODAY'S SESSION")
+MainGui.SetFont("s13 q5 Bold cFF9900", "Segoe UI Variable Display")
+DailyTimeLabel := MainGui.AddText("x280 y32 w180 h26", "00:00:00")
+
+MainGui.SetFont("s8 q5 Bold c5A6578", "Segoe UI Variable Text")
+MainGui.AddText("x480 y15 w180 h16", "ACTIVE PROJECT")
+MainGui.SetFont("s13 q5 Bold c00F0FF", "Segoe UI Variable Display")
+ProjectTimeLabel := MainGui.AddText("x480 y32 w180 h26", "00:00:00")
+
+MainGui.SetFont("s8 q5 Bold c5A6578", "Segoe UI Variable Text")
+MainGui.AddText("x680 y15 w180 h16", "TOTAL STUDIO TIME")
+MainGui.SetFont("s13 q5 Bold cA855F7", "Segoe UI Variable Display")
+TotalTimeLabel := MainGui.AddText("x680 y32 w180 h26", "00:00:00")
+
+BtnRefresh := MainGui.AddButton("x1095 y15 w90 h42", "🔄 Sync")
+BtnRefresh.OnEvent("Click", (*) => RefreshAll())
+
+MainGui.AddProgress("x280 y68 w905 h1 Background232635 c232635", 100)
+
+MainGui.SetFont("s10 q5 cE2E8F0", "Segoe UI Variable Text")
+SearchEdit := MainGui.AddEdit("x280 y82 w460 h36 Background151720 cE2E8F0 -Border", "")
+SearchEdit.OnEvent("Change", (*) => DisplayProjects())
+DllCall("SendMessage", "Ptr", SearchEdit.Hwnd, "UInt", 0x1501, "Ptr", 1, "WStr", "🔍 Search project by name...")
+
+MainGui.SetFont("s9 q5 Bold cBlack", "Segoe UI Variable Text")
+BtnAdd    := MainGui.AddButton("x750 y82 w95 h36", "➕ Import")
+BtnAdd.OnEvent("Click", (*) => AddExternalProject())
+
+BtnMove   := MainGui.AddButton("x855 y82 w90 h36", "📦 Move")
+BtnMove.OnEvent("Click", (*) => MoveSelectedItem())
+
+BtnDelete := MainGui.AddButton("x955 y82 w95 h36", "🗑️ Delete")
+BtnDelete.OnEvent("Click", (*) => DeleteSelectedItem())
+
+BtnFolder := MainGui.AddButton("x1060 y82 w125 h36", "📂 Root Dir")
+BtnFolder.OnEvent("Click", SelectProjectsFolder)
+
+ProjectLV := MainGui.AddListView("x280 y128 w905 h500 -Multi Background111217 cE2E8F0 -Border", ["Project Name", "Last Modified", "Path"])
 ProjectLV.OnEvent("DoubleClick", OpenSelectedProject)
 ProjectLV.OnEvent("ContextMenu", ShowLVContextMenu)
 
 PopulateFolderTree()
+LoadProjectsFromFolder(ProjectsFolder)
+
 SetTimer(TrackStatusAndTime, 1000)
 
-MainGui.Show("w1170 h640")
+if !IsBackgroundMode {
+    MainGui.Show("w1205 h645")
+}
 
 ; ==============================================================================
-; CONTEXT MENUS & ZIPPING LOGIC WITH LOADING SCREEN
+; HIGH QUALITY GDI+ IMAGE RESIZING FUNCTION
+; ==============================================================================
+CreateScaledBitmap(imgPath, targetW, targetH) {
+    static pToken := 0
+    if !pToken {
+        gdiplusInput := Buffer(24, 0)
+        NumPut("UInt", 1, gdiplusInput)
+        DllCall("gdiplus\GdiplusStartup", "Ptr*", &pToken, "Ptr", gdiplusInput, "Ptr", 0)
+    }
+
+    pBitmap := 0
+    pBitmapResized := 0
+    pGraphics := 0
+    hBitmap := 0
+
+    if DllCall("gdiplus\GdipCreateBitmapFromFile", "WStr", imgPath, "Ptr*", &pBitmap) != 0
+        return 0
+
+    DllCall("gdiplus\GdipCreateBitmapFromScan0", "Int", targetW, "Int", targetH, "Int", 0, "Int", 0x26200A, "Ptr", 0, "Ptr*", &pBitmapResized)
+    DllCall("gdiplus\GdipGetImageGraphicsContext", "Ptr", pBitmapResized, "Ptr*", &pGraphics)
+
+    DllCall("gdiplus\GdipSetInterpolationMode", "Ptr", pGraphics, "Int", 7)
+    DllCall("gdiplus\GdipDrawImageRectI", "Ptr", pGraphics, "Ptr", pBitmap, "Int", 0, "Int", 0, "Int", targetW, "Int", targetH)
+
+    DllCall("gdiplus\GdipCreateHBITMAPFromBitmap", "Ptr", pBitmapResized, "Ptr*", &hBitmap, "UInt", 0xFF000000)
+
+    DllCall("gdiplus\GdipDeleteGraphics", "Ptr", pGraphics)
+    DllCall("gdiplus\GdipDisposeImage", "Ptr", pBitmap)
+    DllCall("gdiplus\GdipDisposeImage", "Ptr", pBitmapResized)
+
+    return hBitmap
+}
+
+; ==============================================================================
+; CONTEXT MENUS & ZIPPING LOGIC
 ; ==============================================================================
 
 ShowFolderContextMenu(TreeObj, ItemID, IsRightClick, X, Y) {
@@ -135,34 +239,36 @@ ShowFolderContextMenu(TreeObj, ItemID, IsRightClick, X, Y) {
 
 ZipFolderToDestination(FolderPath) {
     SplitPath(FolderPath, &FolderName)
-    TargetFolder := DirSelect("*" ProjectsFolder, 3, "Select where to save the ZIP file for folder: " FolderName)
+    TargetFolder := DirSelect("*" ProjectsFolder, 3, "Select destination for ZIP: " FolderName)
     if !TargetFolder
         return
 
     DestZip := TargetFolder "\" FolderName ".zip"
     if FileExist(DestZip) {
-        if (MsgBox("A ZIP file with this name already exists in the destination. Overwrite?", "File Exists", 4) != "Yes")
+        if (MsgBox("A ZIP file already exists in destination. Overwrite?", "File Exists", 4) != "Yes")
             return
         FileDelete(DestZip)
     }
 
-    ; --- ZIPPING LOADING SCREEN ---
     ZipGui := Gui("+ToolWindow -Caption +AlwaysOnTop", "Compressing")
-    ZipGui.BackColor := "0A0512"
-    ZipGui.SetFont("s11 q5 Bold c80D8FF", "Segoe UI Variable Display")
+    ZipGui.BackColor := "0D0E12"
+    ZipGui.SetFont("s11 q5 Bold c00F0FF", "Segoe UI Variable Display")
     ZipGui.AddText("x20 y20 w260 h25 Center", "📦 Zipping folder...")
-    ZipGui.SetFont("s9 q5 c8A82A0", "Segoe UI Variable Text")
-    ZipGui.AddText("x20 y50 w260 h20 Center", "Please wait, compressing...")
-    ZipGui.AddProgress("x20 y80 w260 h8 Background23153D c80D8FF")
+    ZipGui.SetFont("s9 q5 c8B95A5", "Segoe UI Variable Text")
+    ZipGui.AddText("x20 y50 w260 h20 Center", "Please wait...")
+    ZipGui.AddProgress("x20 y80 w260 h4 Background151720 c00F0FF Range0-0", 0)
     ZipGui.Show("w300 h110")
 
     try {
-        RunWait('powershell -NoProfile -Command "Compress-Archive -Path \`"' FolderPath '\`" -DestinationPath \`"' DestZip '\`" -Force"', , "Hide")
+        SafeFolder := StrReplace(FolderPath, "'", "''")
+        SafeZip := StrReplace(DestZip, "'", "''")
+        psCmd := Format("powershell -NoProfile -Command `"Compress-Archive -LiteralPath '{1}' -DestinationPath '{2}' -Force`"", SafeFolder, SafeZip)
+        RunWait(psCmd, , "Hide")
         ZipGui.Destroy()
         MsgBox("Folder successfully zipped to:`n" DestZip, "Completed", "Iconi")
     } catch {
         ZipGui.Destroy()
-        MsgBox("Error creating the ZIP file.", "Error", "Icon!")
+        MsgBox("Error creating ZIP file.", "Error", "Icon!")
     }
 }
 
@@ -184,7 +290,7 @@ ZipProjectToDestination(LV, RowNumber) {
     if !FileExist(ProjectPath)
         return
 
-    TargetFolder := DirSelect("*" ProjectsFolder, 3, "Select where to save the ZIP file for project: " ProjName)
+    TargetFolder := DirSelect("*" ProjectsFolder, 3, "Select destination for ZIP: " ProjName)
     if !TargetFolder
         return
 
@@ -192,28 +298,30 @@ ZipProjectToDestination(LV, RowNumber) {
     DestZip := TargetFolder "\" NoExtName ".zip"
 
     if FileExist(DestZip) {
-        if (MsgBox("A ZIP file with this name already exists in the destination. Overwrite?", "File Exists", 4) != "Yes")
+        if (MsgBox("A ZIP file already exists in destination. Overwrite?", "File Exists", 4) != "Yes")
             return
         FileDelete(DestZip)
     }
 
-    ; --- ZIPPING LOADING SCREEN ---
     ZipGui := Gui("+ToolWindow -Caption +AlwaysOnTop", "Compressing")
-    ZipGui.BackColor := "0A0512"
-    ZipGui.SetFont("s11 q5 Bold c80D8FF", "Segoe UI Variable Display")
+    ZipGui.BackColor := "0D0E12"
+    ZipGui.SetFont("s11 q5 Bold c00F0FF", "Segoe UI Variable Display")
     ZipGui.AddText("x20 y20 w260 h25 Center", "📦 Zipping project...")
-    ZipGui.SetFont("s9 q5 c8A82A0", "Segoe UI Variable Text")
-    ZipGui.AddText("x20 y50 w260 h20 Center", "Please wait, compressing...")
-    ZipGui.AddProgress("x20 y80 w260 h8 Background23153D c80D8FF")
+    ZipGui.SetFont("s9 q5 c8B95A5", "Segoe UI Variable Text")
+    ZipGui.AddText("x20 y50 w260 h20 Center", "Please wait...")
+    ZipGui.AddProgress("x20 y80 w260 h4 Background151720 c00F0FF Range0-0", 0)
     ZipGui.Show("w300 h110")
 
     try {
-        RunWait('powershell -NoProfile -Command "Compress-Archive -Path \`"' ProjectPath '\`" -DestinationPath \`"' DestZip '\`" -Force"', , "Hide")
+        SafeProject := StrReplace(ProjectPath, "'", "''")
+        SafeZip := StrReplace(DestZip, "'", "''")
+        psCmd := Format("powershell -NoProfile -Command `"Compress-Archive -LiteralPath '{1}' -DestinationPath '{2}' -Force`"", SafeProject, SafeZip)
+        RunWait(psCmd, , "Hide")
         ZipGui.Destroy()
         MsgBox("Project successfully zipped to:`n" DestZip, "Completed", "Iconi")
     } catch {
         ZipGui.Destroy()
-        MsgBox("Error creating the ZIP file.", "Error", "Icon!")
+        MsgBox("Error creating ZIP file.", "Error", "Icon!")
     }
 }
 
@@ -224,74 +332,92 @@ ShowProjectDetails(LV, RowNumber) {
     if !FileExist(ProjectPath)
         return
 
+    CleanName := RegExReplace(ProjName, "i)\.flp$", "")
+
     FileModTime := FileGetTime(ProjectPath, "M")
     FormattedModTime := FormatTime(FileModTime, "yyyy/MM/dd, HH:mm")
 
-    SavedProjectSeconds := Number(IniRead(IniPath, "ProjectStats", ProjName, 0))
+    SavedProjectSeconds := Number(IniRead(IniPath, "ProjectStats", CleanName, 0))
     FormattedProjectTime := FormatSecondsLong(SavedProjectSeconds)
 
     DetailsGui := Gui("+Owner" MainGui.Hwnd " +ToolWindow", "Project Details — " ProjName)
-    DetailsGui.BackColor := "0A0512"
+    DetailsGui.BackColor := "0D0E12"
 
-    BtnBack := DetailsGui.AddButton("x20 y20 w90 h32", "⬅️ Back")
-    BtnBack.OnEvent("Click", (*) => DetailsGui.Destroy())
-
-    DetailsGui.SetFont("s14 q5 Bold c80D8FF", "Segoe UI Variable Display")
-    DetailsGui.AddText("x125 y22 w320 h35", ProjName)
-
-    BtnOpen := DetailsGui.AddButton("x465 y20 w80 h32", "Open")
-    BtnOpen.OnEvent("Click", (*) => (DetailsGui.Destroy(), RunFLStudio(ProjectPath)))
-
-    ; --- DETAILS SECTION ---
-    DetailsGui.SetFont("s10 q5 Bold cD1B3FF", "Segoe UI Variable Text")
-    DetailsGui.AddText("x20 y70 w525 h22", "Details")
-
-    SavedDetails := IniRead(IniPath, "CustomDetails", ProjName, "")
-    
-    BpmText := "BPM: N/A"
-    PluginsText := "Plugins: N/A"
-    SamplesText := "Samples: N/A"
-    TrackLenText := "Track Length: N/A"
-
-    if (SavedDetails != "") {
-        Loop Parse, SavedDetails, "`n", "`r" {
-            line := Trim(A_LoopField)
-            if RegExMatch(line, "i)^BPM:")
-                BpmText := line
-            else if RegExMatch(line, "i)^Plugins:")
-                PluginsText := line
-            else if RegExMatch(line, "i)^Samples:")
-                SamplesText := line
-            else if RegExMatch(line, "i)^Track Length:")
-                TrackLenText := line
+    SaveAndCloseGui(LaunchProject := false) {
+        IniWrite(EncodeMultiline(DetailsEdit.Value), IniPath, "CustomDetails", CleanName)
+        DetailsGui.Destroy()
+        if LaunchProject {
+            RunFLStudio(ProjectPath)
         }
     }
 
-    DetailsText := BpmText "`n" 
-                 . PluginsText "`n" 
-                 . SamplesText "`n" 
-                 . TrackLenText "`n" 
-                 . "Project Time: " FormattedProjectTime "`n" 
-                 . "Last Modified: " FormattedModTime
+    BtnBack := DetailsGui.AddButton("x20 y20 w90 h32", "⬅️ Back")
+    BtnBack.OnEvent("Click", (*) => SaveAndCloseGui(false))
 
-    DetailsGui.SetFont("s9 q5 cE0E0E0", "Segoe UI Variable Text")
-    DetailsEdit := DetailsGui.AddEdit("x20 y95 w525 h210 Background110A1F -Border", DetailsText)
+    DetailsGui.SetFont("s13 q5 Bold c00F0FF", "Segoe UI Variable Display")
+    DetailsGui.AddText("x125 y22 w320 h35", ProjName)
+
+    BtnOpen := DetailsGui.AddButton("x465 y20 w80 h32", "Open")
+    BtnOpen.OnEvent("Click", (*) => SaveAndCloseGui(true))
+
+    DetailsGui.SetFont("s10 q5 Bold cA855F7", "Segoe UI Variable Text")
+    DetailsGui.AddText("x20 y65 w525 h22", "Project Notes")
+
+    SavedDetailsRaw := IniRead(IniPath, "CustomDetails", CleanName, "")
+    SavedDetails := DecodeMultiline(SavedDetailsRaw)
     
-    DetailsEdit.OnEvent("Change", (Ctrl, *) => IniWrite(Ctrl.Value, IniPath, "CustomDetails", ProjName))
+    if (SavedDetails == "") {
+        SavedDetails := "BPM: N/A`nPlugins: N/A`nSamples: N/A`nKey: N/A"
+    }
 
-    DetailsGui.Show("w565 h330")
+    DetailsGui.SetFont("s9 q5 cE2E8F0", "Segoe UI Variable Text")
+    DetailsEdit := DetailsGui.AddEdit("x20 y90 w525 h180 Background151720 -Border", SavedDetails)
+    
+    DetailsGui.SetFont("s9 q5 c8B95A5", "Segoe UI Variable Text")
+    MetaText := "⏱️ Project Time: " FormattedProjectTime "  |  📅 Last Modified: " FormattedModTime
+    DetailsGui.AddText("x20 y280 w525 h25", MetaText)
+
+    DetailsGui.OnEvent("Close", (*) => SaveAndCloseGui(false))
+    DetailsGui.OnEvent("Escape", (*) => SaveAndCloseGui(false))
+    DetailsGui.Show("w565 h315")
+}
+
+EncodeMultiline(str) {
+    str := StrReplace(str, "`r`n", "<br>")
+    return StrReplace(str, "`n", "<br>")
+}
+
+DecodeMultiline(str) {
+    return StrReplace(str, "<br>", "`r`n")
 }
 
 FormatSecondsLong(Sec) {
     Hours := Floor(Sec / 3600)
     Minutes := Floor(Mod(Sec, 3600) / 60)
     Seconds := Mod(Sec, 60)
-    return Hours " Hours, " Minutes " Minutes, " Seconds " Seconds"
+    return Hours "h " Minutes "m " Seconds "s"
 }
 
 ; ==============================================================================
 ; GENERAL LOGIC & TIME TRACKING
 ; ==============================================================================
+
+SaveStatsOnExit(ExitReason, ExitCode) {
+    SaveStatsToDisk()
+    if hLogoLoading
+        DllCall("DeleteObject", "Ptr", hLogoLoading)
+    if hLogoMain
+        DllCall("DeleteObject", "Ptr", hLogoMain)
+}
+
+SaveStatsToDisk() {
+    global DailySeconds, TotalSeconds, ProjectSeconds, LastDetectedProject, CurrentDate, IniPath
+    IniWrite(DailySeconds, IniPath, "Stats", CurrentDate)
+    IniWrite(TotalSeconds, IniPath, "Stats", "TotalSeconds")
+    if (LastDetectedProject != "" && LastDetectedProject != "FL Studio") {
+        IniWrite(ProjectSeconds, IniPath, "ProjectStats", LastDetectedProject)
+    }
+}
 
 RefreshAll() {
     PopulateFolderTree()
@@ -322,10 +448,11 @@ RunFLStudio(ProjectPath := "") {
 SelectProjectsFolder(*) {
     SelectedFolder := DirSelect("*" ProjectsFolder, 3, "Select root folder for FL Studio projects")
     if SelectedFolder {
-        global ProjectsFolder := SelectedFolder
-        global CurrentSelectedFolderPath := SelectedFolder
+        global ProjectsFolder := RTrim(SelectedFolder, "\")
+        global CurrentSelectedFolderPath := ProjectsFolder
         IniWrite(ProjectsFolder, IniPath, "Settings", "ProjectsFolder")
         PopulateFolderTree()
+        LoadProjectsFromFolder(ProjectsFolder)
     }
 }
 
@@ -343,7 +470,7 @@ AddExternalProject() {
     DestPath := TargetFolder "\" FileName
     
     if FileExist(DestPath) {
-        if (MsgBox("A file with this name already exists in the selected folder. Overwrite?", "File Exists", 4) != "Yes")
+        if (MsgBox("A file with this name already exists in destination. Overwrite?", "File Exists", 4) != "Yes")
             return
     }
 
@@ -352,6 +479,8 @@ AddExternalProject() {
 }
 
 MoveSelectedItem() {
+    global ProjectLV, FolderTree, ProjectsFolder, CurrentSelectedFolderPath, MainGui
+    
     Row := ProjectLV.GetNext()
     if (Row > 0) {
         ProjectPath := ProjectLV.GetText(Row, 3)
@@ -372,29 +501,35 @@ MoveSelectedItem() {
             LoadProjectsFromFolder(CurrentSelectedFolderPath)
         }
     } else {
-        SelectedID := FolderTree.GetSelection()
-        if SelectedID {
-            FolderPath := GetFullPath(SelectedID)
-            if (FolderPath == ProjectsFolder) {
-                MsgBox("Cannot move the main Root folder.", "Action Blocked", "Icon!")
-                return
+        try {
+            if (ControlGetFocus(MainGui.Hwnd) == FolderTree.Hwnd) {
+                SelectedID := FolderTree.GetSelection()
+                if SelectedID {
+                    FolderPath := GetFullPath(SelectedID)
+                    if (StrLower(FolderPath) == StrLower(ProjectsFolder)) {
+                        return
+                    }
+                    
+                    SplitPath(FolderPath, &FolderName)
+                    TargetFolder := DirSelect("*" ProjectsFolder, 3, "Move folder " FolderName " to:")
+                    if !TargetFolder
+                        return
+                    
+                    DestPath := TargetFolder "\" FolderName
+                    DirMove(FolderPath, DestPath, "R")
+                    PopulateFolderTree()
+                    LoadProjectsFromFolder(ProjectsFolder)
+                }
             }
-            
-            SplitPath(FolderPath, &FolderName)
-            TargetFolder := DirSelect("*" ProjectsFolder, 3, "Move folder " FolderName " to:")
-            if !TargetFolder
-                return
-            
-            DestPath := TargetFolder "\" FolderName
-            DirMove(FolderPath, DestPath, "R")
-            PopulateFolderTree()
-        } else {
-            MsgBox("Please select a project or folder to move first.", "No Selection", "Icon!")
+        } catch {
+            return
         }
     }
 }
 
 DeleteSelectedItem() {
+    global ProjectLV, FolderTree, ProjectsFolder, CurrentSelectedFolderPath, MainGui
+    
     Row := ProjectLV.GetNext()
     if (Row > 0) {
         ProjectPath := ProjectLV.GetText(Row, 3)
@@ -407,21 +542,25 @@ DeleteSelectedItem() {
             }
         }
     } else {
-        SelectedID := FolderTree.GetSelection()
-        if SelectedID {
-            FolderPath := GetFullPath(SelectedID)
-            if (FolderPath == ProjectsFolder) {
-                MsgBox("Cannot delete the main Root folder.", "Action Blocked", "Icon!")
-                return
+        try {
+            if (ControlGetFocus(MainGui.Hwnd) == FolderTree.Hwnd) {
+                SelectedID := FolderTree.GetSelection()
+                if SelectedID {
+                    FolderPath := GetFullPath(SelectedID)
+                    if (StrLower(FolderPath) == StrLower(ProjectsFolder)) {
+                        return
+                    }
+                    
+                    SplitPath(FolderPath, &FolderName)
+                    if (MsgBox("Permanently delete this folder and all its contents?`n`n" FolderName, "Confirm Deletion", 4) == "Yes") {
+                        DirDelete(FolderPath, 1)
+                        PopulateFolderTree()
+                        LoadProjectsFromFolder(ProjectsFolder)
+                    }
+                }
             }
-            
-            SplitPath(FolderPath, &FolderName)
-            if (MsgBox("Permanently delete this folder and all its contents?`n`n" FolderName, "Confirm Deletion", 4) == "Yes") {
-                DirDelete(FolderPath, 1)
-                PopulateFolderTree()
-            }
-        } else {
-            MsgBox("Please select an item to delete.", "No Selection", "Icon!")
+        } catch {
+            return
         }
     }
 }
@@ -498,9 +637,9 @@ DisplayProjects() {
         ProjectLV.Add(, proj.Name, FormattedDate, proj.Path)
     }
     
-    ProjectLV.ModifyCol(1, 300)
-    ProjectLV.ModifyCol(2, 170)
-    ProjectLV.ModifyCol(3, 360)
+    ProjectLV.ModifyCol(1, 320)
+    ProjectLV.ModifyCol(2, 180)
+    ProjectLV.ModifyCol(3, 380)
 }
 
 SortItemList(List) {
@@ -528,8 +667,8 @@ OpenSelectedProject(LV, RowNumber) {
 
 TrackStatusAndTime() {
     global DailySeconds, TotalSeconds, ProjectSeconds, LastDetectedProject, CurrentDate
+    static FlushCounter := 0
 
-    ; Controllo a mezzanotte se la data è cambiata
     TodayKey := A_YYYY "_" A_MM "_" A_DD
     if (TodayKey != CurrentDate) {
         CurrentDate := TodayKey
@@ -544,10 +683,6 @@ TrackStatusAndTime() {
 
         DailySeconds++
         TotalSeconds++
-        ProjectSeconds++
-
-        IniWrite(DailySeconds, IniPath, "Stats", CurrentDate)
-        IniWrite(TotalSeconds, IniPath, "Stats", "TotalSeconds")
 
         WinTitle := ""
         if WinExist("ahk_exe FL64.exe")
@@ -556,15 +691,37 @@ TrackStatusAndTime() {
             WinTitle := WinGetTitle("ahk_exe FL.exe")
 
         if (WinTitle != "") {
-            CleanTitle := RegExReplace(WinTitle, "i)\s*-\s*FL Studio.*$", "")
-            if (CleanTitle != LastDetectedProject) {
+            if RegExMatch(WinTitle, "i)^(.+?)\s*-\s*FL Studio", &match) {
+                CleanTitle := RegExReplace(match[1], "i)\.flp$", "")
+            } else {
+                CleanTitle := "FL Studio"
+            }
+
+            if (CleanTitle != "" && CleanTitle != "FL Studio" && CleanTitle != LastDetectedProject) {
+                if (LastDetectedProject != "" && LastDetectedProject != "FL Studio") {
+                    IniWrite(ProjectSeconds, IniPath, "ProjectStats", LastDetectedProject)
+                }
                 LastDetectedProject := CleanTitle
                 ProjectSeconds := Number(IniRead(IniPath, "ProjectStats", CleanTitle, 0))
             }
-            IniWrite(ProjectSeconds, IniPath, "ProjectStats", CleanTitle)
         }
+
+        if (LastDetectedProject != "" && LastDetectedProject != "FL Studio") {
+            ProjectSeconds++
+        }
+
+        FlushCounter++
+        if (FlushCounter >= 30) {
+            SaveStatsToDisk()
+            FlushCounter := 0
+        }
+
     } else {
-        StatusDot.Value := "🔴"
+        if (LastDetectedProject != "") {
+            SaveStatsToDisk()
+            LastDetectedProject := ""
+        }
+        StatusDot.Value := "⚪"
         StatusText.Value := "Offline"
         ProjectSeconds := 0
     }
