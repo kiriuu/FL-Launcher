@@ -1,6 +1,8 @@
 # FL Launcher
 *A Launcher for FL Studio, developed with AutoHotkey v2*
 
+<img width="256" height="256" alt="fl-studio" src="https://github.com/user-attachments/assets/5f346754-bdda-48e5-b577-b24143feb85d" />
+
 Instrucions
 -
 - Download the latest version of **FL-Launcher-x64.zip** or **FL-Launcher-x32.zip** from [*here*](https://github.com/kiriuu/FL-Launcher/releases). To find out which version you need, just go to Windows Settings and check whether your PC is x64 or x32.
