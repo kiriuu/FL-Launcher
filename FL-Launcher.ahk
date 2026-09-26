@@ -50,7 +50,7 @@ global hLogoMain := 0
 ; ==============================================================================
 ; SYSTEM TRAY SETUP
 ; ==============================================================================
-A_IconTip := "FL Launcher — DAW Workspace"
+A_IconTip := "FL Launcher"
 Tray := A_TrayMenu
 Tray.Delete()
 Tray.Add("🎛️ Open Launcher", (*) => MainGui.Show())
@@ -97,7 +97,7 @@ if !IsBackgroundMode && IsSet(LoadingGui) {
 ; ==============================================================================
 ; MAIN GUI
 ; ==============================================================================
-MainGui := Gui("-Resize", "FL Launcher — Workspace")
+MainGui := Gui("-Resize", "FL Launcher")
 MainGui.BackColor := "0D0E12"
 
 MainGui.OnEvent("Close", (*) => MainGui.Hide())
